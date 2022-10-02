@@ -107,24 +107,42 @@ class BibMerger:
     def _compare(self, nkey: str, nentry: BibEntry_T,
                  okey: str, oentry: BibEntry_T) -> bool:
         assert nkey != okey
+        oauthor = oentry.get("author", "")
+        nauthor = nentry.get("author", "")
+        otitle = oentry.get("title", "")
+        ntitle = nentry.get("title", "")
         # check for clear identifiers
-        for field in ["doi", "isbn"]:
+        for field in ["doi"]:
             oval = oentry.get(field)
             nval = nentry.get(field)
             if oval == nval and oval is not None:
+                # double check with title to avoid false matches due
+                # to bad data
+                if not str_compare(otitle, ntitle):
+                    logger.warning("Skipping dubious %s match for %s and %s",
+                                   field, okey, nkey)
+                    return False
                 logger.info("Found match between %s and %s based on %s",
                             okey, nkey, field)
                 return True
         # check for identical author and title
-        oauthor = oentry.get("author")
-        nauthor = nentry.get("author")
-        otitle = oentry.get("title")
-        ntitle = nentry.get("title")
         if (oauthor == nauthor and oauthor and otitle == ntitle and otitle):
             logger.info("Found match between %s and %s based on author/title",
                         okey, nkey)
             return True
         return False
+
+
+def str_compare(valA: str, valB: str) -> bool:
+    return stripped(valA) == stripped(valB)
+
+
+def stripped(val: str) -> str:
+    val = val.replace("{", "").replace("}", "")
+    val = val.lower()
+    val = re.sub(r"\s* ", " ", val)
+    val = val.strip()
+    return val
 
 
 def parse_bibfile(bibfile: TextIO) -> BibFile:
