@@ -48,24 +48,29 @@ class BibMerger:
         merged: Dict[str, BibEntry_T] = {}
         mtimes: Dict[str, datetime] = {}
         aliases: Dict[str, Set[str]] = defaultdict(set)
+        alias_map: Dict[str, str] = {}
 
         # iterate over bibs and add new
         # or replace existing if newer
         for bib in self.bibs:
             for key, entry in bib.entries.items():
-                if key in merged:
+                if key in merged or key in alias_map:
                     logger.debug("Duplicate key %s", key)
-                    ext_mtime = mtimes[key]
+                    refkey = alias_map.get(key, key)
+                    ext_mtime = mtimes[refkey]
                     if ext_mtime < bib.mtime:
                         # use new entry
-                        merged[key] = entry
-                        mtimes[key] = bib.mtime
+                        entry["ID"] = refkey
+                        merged[refkey] = entry
+                        mtimes[refkey] = bib.mtime
                 else:
                     # check for entry under different keys
                     if ext_key := self._match(key, entry, merged):
                         # we found a matching entry
                         # add new key to aliases of existing keys
                         aliases[ext_key].add(key)
+                        assert key not in alias_map, key
+                        alias_map[key] = ext_key
                         # use new entry if newer
                         ext_mtime = mtimes[ext_key]
                         if ext_mtime < bib.mtime:
@@ -83,6 +88,7 @@ class BibMerger:
             prev_ids = merged[key].get("ids")
             assert not prev_ids, key
             assert key not in ids, ids
+            assert merged[key]["ID"] == key, key
             merged[key]["ids"] = ",".join(ids)
 
         outdb = BibDatabase()
@@ -139,6 +145,7 @@ def str_compare(valA: str, valB: str) -> bool:
 
 def stripped(val: str) -> str:
     val = val.replace("{", "").replace("}", "")
+    val = val.replace("\n", "").replace("\r", "")
     val = val.lower()
     val = re.sub(r"\s* ", " ", val)
     val = val.strip()
